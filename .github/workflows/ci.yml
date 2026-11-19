@@ -1,0 +1,72 @@
+name: Validacion automatica Yape
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Pruebas backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Obtener codigo
+        uses: actions/checkout@v7
+
+      - name: Configurar Java 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Compilar y ejecutar pruebas Java
+        run: bash ./mvnw --batch-mode --no-transfer-progress test
+
+      - name: Guardar reportes del backend
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reportes-backend-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/surefire-reports/
+          if-no-files-found: warn
+          retention-days: 30
+
+  frontend:
+    name: Pruebas billetera
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: src/main/frontend
+        shell: bash
+    steps:
+      - name: Obtener codigo
+        uses: actions/checkout@v7
+
+      - name: Configurar Node 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22.14.0'
+          cache: npm
+          cache-dependency-path: src/main/frontend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Ejecutar pruebas de la billetera
+        run: npm test 2>&1 | tee wallet-tests.log
+
+      - name: Guardar reporte de la billetera
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reportes-billetera-${{ github.run_id }}-${{ github.run_attempt }}
+          path: src/main/frontend/wallet-tests.log
+          if-no-files-found: warn
+          retention-days: 30
