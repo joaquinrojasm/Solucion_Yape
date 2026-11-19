@@ -41,7 +41,9 @@ public class TransferenciaController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El monto a transferir debe ser mayor a cero");
         }
 
-        // DEMO: se omite la validacion de fondos para comprobar el bloqueo del pipeline.
+        if (monto > origen.getSaldo()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La cuenta origen no tiene fondos suficientes");
+        }
 
         // Descuenta el monto de la cuenta origen
         origen.setSaldo(origen.getSaldo() - monto);
