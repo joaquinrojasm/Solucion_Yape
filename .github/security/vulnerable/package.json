@@ -1,0 +1,9 @@
+{
+  "name": "fixture-auditoria-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dependencia deliberadamente vulnerable para demostrar el bloqueo; no pertenece a la aplicacion ni se ejecuta.",
+  "dependencies": {
+    "lodash": "4.17.20"
+  }
+}

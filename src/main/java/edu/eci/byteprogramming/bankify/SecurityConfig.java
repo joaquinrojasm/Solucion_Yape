@@ -6,8 +6,8 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
 
 /**
- * Este modulo no maneja autenticacion ni JWT: se desactivan por completo
- * para que los endpoints de transferencias y Swagger queden abiertos.
+ * API educativa sin autenticacion ni JWT. Se conserva la proteccion CSRF:
+ * los clientes deben obtener el token en /api/csrf antes de modificar datos.
  */
 @Configuration
 public class SecurityConfig {
@@ -15,7 +15,6 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
                 .httpBasic(httpBasic -> httpBasic.disable())
                 .formLogin(formLogin -> formLogin.disable());

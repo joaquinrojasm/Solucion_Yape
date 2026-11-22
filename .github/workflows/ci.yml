@@ -5,6 +5,15 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      forzar_revision:
+        description: Solicitar aprobacion humana aunque el cambio sea de bajo riesgo
+        type: boolean
+        default: true
+      demostrar_vulnerabilidad:
+        description: Auditar una dependencia vulnerable aislada y bloquear el despliegue
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -26,14 +35,181 @@ jobs:
           cache: maven
 
       - name: Compilar y ejecutar pruebas Java
-        run: bash ./mvnw --batch-mode --no-transfer-progress test
+        run: bash ./mvnw --batch-mode --no-transfer-progress -Pseguridad verify
+
+      - name: Configurar Node para identificar el artefacto
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22.14.0'
+
+      - name: Identificar artefacto y commit
+        run: node .github/scripts/prepare-artifact.mjs
+
+      - name: Guardar aplicacion validada
+        uses: actions/upload-artifact@v7
+        with:
+          name: aplicacion-${{ github.sha }}
+          path: |
+            target/*.jar
+            target/release-manifest.json
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Guardar reportes del backend
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: reportes-backend-${{ github.run_id }}-${{ github.run_attempt }}
-          path: target/surefire-reports/
+          path: |
+            target/surefire-reports/
+            target/spotbugsXml.xml
+          if-no-files-found: warn
+          retention-days: 30
+
+  seguridad:
+    name: Seguridad dependencias
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Obtener codigo
+        uses: actions/checkout@v7
+
+      - name: Configurar Node 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22.14.0'
+          cache: npm
+          cache-dependency-path: src/main/frontend/package-lock.json
+
+      - name: Preparar reportes
+        run: mkdir -p target
+
+      - name: Instalar dependencias para auditar
+        working-directory: src/main/frontend
+        run: npm ci --ignore-scripts --no-audit
+
+      - name: Bloquear vulnerabilidades altas o criticas
+        working-directory: src/main/frontend
+        run: npm audit --audit-level=high --json | tee "$GITHUB_WORKSPACE/target/npm-audit.json"
+
+      - name: Demostrar bloqueo de una dependencia vulnerable aislada
+        if: github.event_name == 'workflow_dispatch' && inputs.demostrar_vulnerabilidad
+        working-directory: .github/security/vulnerable
+        run: npm audit --package-lock-only --audit-level=high --json | tee "$GITHUB_WORKSPACE/target/npm-audit-demo.json"
+
+      - name: Guardar reportes de seguridad
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reportes-seguridad-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/npm-audit*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  riesgo:
+    name: Clasificacion de riesgo
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      nivel: ${{ steps.clasificar.outputs.nivel }}
+      ambiente: ${{ steps.clasificar.outputs.ambiente }}
+    steps:
+      - name: Obtener historial del cambio
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22.14.0'
+
+      - name: Comprobar las reglas de riesgo
+        run: node --test .github/scripts/classify-risk.test.mjs
+
+      - name: Clasificar componentes afectados
+        id: clasificar
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          FORCE_REVIEW: ${{ github.event_name == 'workflow_dispatch' && inputs.forzar_revision }}
+        run: node .github/scripts/classify-risk.mjs
+
+      - name: Guardar clasificacion
+        uses: actions/upload-artifact@v7
+        with:
+          name: clasificacion-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/risk-report.json
+          if-no-files-found: error
+          retention-days: 30
+
+  ambientes:
+    name: Verificar autorizacion configurada
+    needs: [backend, frontend, seguridad, riesgo]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Obtener codigo
+        uses: actions/checkout@v7
+
+      - name: Configurar Node 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22.14.0'
+
+      - name: Verificar proteccion del ambiente seleccionado
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_ENVIRONMENT: ${{ needs.riesgo.outputs.ambiente }}
+        run: node .github/scripts/check-environment.mjs
+
+  despliegue:
+    name: Despliegue de demostracion
+    needs: [backend, frontend, seguridad, riesgo, ambientes]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: ${{ needs.riesgo.outputs.ambiente }}
+    steps:
+      - name: Obtener codigo
+        uses: actions/checkout@v7
+
+      - name: Configurar Java 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Configurar Node 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22.14.0'
+
+      - name: Descargar el mismo artefacto validado
+        uses: actions/download-artifact@v8
+        with:
+          name: aplicacion-${{ github.sha }}
+          path: target/aplicacion-validada
+
+      - name: Desplegar y verificar la aplicacion
+        env:
+          RELEASE_ENVIRONMENT: ${{ needs.riesgo.outputs.ambiente }}
+          RELEASE_RISK: ${{ needs.riesgo.outputs.nivel }}
+        run: node .github/scripts/deploy-demo.mjs target/aplicacion-validada
+
+      - name: Guardar evidencias del despliegue
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: evidencias-despliegue-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/release-reports/
           if-no-files-found: warn
           retention-days: 30
 
