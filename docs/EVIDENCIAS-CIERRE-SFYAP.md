@@ -21,9 +21,9 @@ El desarrollo corresponde a las oportunidades seleccionadas en el trabajo final:
 
 Cada ejecución satisfactoria contiene artefactos descargables con reportes del backend, billetera, seguridad, riesgo, aplicación empaquetada y verificación del despliegue. Los artefactos GitHub Actions caducan conforme a la retención configurada (30 días), por lo que conviene descargarlos para el informe.
 
-## Validación pendiente de ruta automática de bajo riesgo
+## Validación completada de ruta automática de bajo riesgo
 
-Este archivo y la actualización de la documentación se proponen mediante un PR **solo documental**. Al integrar el PR, el evento `push` sobre `main` debe identificar las rutas de documentación como **riesgo bajo** y utilizar `demo-automatico`, siempre que todas las compuertas pasen. La evidencia válida es el registro real del workflow posterior a la integración; no se considera completado hasta comprobarlo.
+El [PR #3, exclusivamente documental](https://github.com/joaquinrojasm/Solucion_Yape/pull/3), se integró en `main` con commit `9ea63db420ef7099735aa6a0276826b36654afad`. En el [workflow de cierre](https://github.com/joaquinrojasm/Solucion_Yape/actions/runs/45251631157), el clasificador registró **riesgo bajo**, razón «Solo documentación; sin cambios en código ni dependencias» y ambiente **`demo-automatico`**. Los seis jobs, incluido el despliegue de demostración temporal, finalizaron exitosamente.
 
 ## Criterios de cierre y resultados
 
@@ -32,7 +32,7 @@ Este archivo y la actualización de la documentación se proponen mediante un PR
 | Compilación y pruebas estables | Controles correctos, artefactos generados | Run 45045139449 | Completado |
 | Defecto controlado en fondos | Fallo en CI, sin liberación de la versión defectuosa | Run 44564174389 | Completado |
 | Riesgo alto con revisión | Ambiente protegido y liberación tras la compuerta | Run 45045327177 | Ejecución completada; consultar historial de aprobación para atribución |
-| Riesgo bajo documental | Clasificación bajo, `demo-automatico`, despliegue exitoso | PR documental de cierre y su futura ejecución de `main` | Por verificar |
+| Riesgo bajo documental | Clasificación bajo, `demo-automatico`, despliegue exitoso | [Run 45251631157](https://github.com/joaquinrojasm/Solucion_Yape/actions/runs/45251631157) | Completado |
 | Artefacto trazable | Mismo JAR versionado con SHA-256 y reporte de verificación | Artefactos de runs exitosos | Completado en ejecución temporal |
 
 ## Gestión y documentación
